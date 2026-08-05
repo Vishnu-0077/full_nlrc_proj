@@ -204,10 +204,10 @@ def generate_rossler(
     return data
 
 scalar = StandardScaler()
-data = generate_lorenz()
-data = data[1000:]
-train_len = 3000
-test_len = 500
+data = generate_rossler()
+data = data[0:]
+train_len = 10000
+test_len = 1000
 k = 9
 
 p = 0

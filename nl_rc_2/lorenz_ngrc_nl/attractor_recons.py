@@ -243,10 +243,10 @@ def generate_rossler(
     return data
 
 scalar = MinMaxScaler(feature_range=(0,1))
-data = generate_lorenz()
-data = data[1000:]
-train_len = 3000
-test_len = 500
+data = generate_rossler()
+data = data[0:]
+train_len = 10000
+test_len = 1000
 k = 3
 
 p = 0
@@ -278,7 +278,17 @@ print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
 print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
 print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
+x = y_pred[:,0]
+y = y_pred[:,1]
+z = y_pred[:,2]
+X_orig = scalar.inverse_transform(X_train)[:,0]
+y_orig = scalar.inverse_transform(X_train)[:,1]
+z_orig = scalar.inverse_transform(X_train)[:,2]
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+ax.plot(X_orig,y_orig,z_orig,color='red',label='Original')
+ax.plot(x,y,z,color='blue',label='Predicted')
 plt.legend()
 plt.show()
