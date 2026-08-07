@@ -205,7 +205,7 @@ def generate_rossler(
 
 scalar = StandardScaler()
 data = generate_lorenz()
-data = data[4000:]
+data = data[0:]
 train_len = 3000
 test_len = 500
 k = 3

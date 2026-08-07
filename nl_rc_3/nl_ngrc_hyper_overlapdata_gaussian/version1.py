@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
 class nlfea:
-    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=3):
+    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=2):
         self.b = b
         self.n = n
         self.test_len = test_len

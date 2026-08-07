@@ -207,7 +207,7 @@ scalar = StandardScaler()
 data = generate_rossler()
 train_len = 3000
 test_len = 1000
-k = 9
+k = 3
 
 p = 0
 push = train_len+p+k

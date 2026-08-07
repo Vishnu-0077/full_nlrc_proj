@@ -232,7 +232,7 @@ n_splits = 5
 train_len = 3000
 test_len = 500
 skip_len = 500
-k=9
+k=3
 mse_lst = []
 reg_lst = [1e-6,1e-5,1e-4,1e-3]
 

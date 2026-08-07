@@ -244,7 +244,7 @@ def generate_rossler(
 
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
-data = data[1000:]
+data = data[1500:]
 train_len = 3000
 test_len = 500
 k = 3
