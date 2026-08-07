@@ -1,77 +1,19 @@
 import numpy as np
 import random
 from scipy import linalg
-from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
-from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.metrics import mean_squared_error,mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
 class nlfea:
-    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=3):
-        self.b = b
-        self.n = n
+    def __init__(self,test_len=10,reg=1e-8,k=3,degree=2):
         self.test_len = test_len
         self.reg = reg
         self.k = k
         self.degree = degree
+        self.feature_scalar = StandardScaler()
         self.insize = 3
-
-    def ss_to_binary(self,x,thres):
-        return (np.array(x)>thres).astype(int)
-
-    def firing_rate(self,x):
-        b = self.b
-        c = 0
-        for v in x:
-            if v>b:
-                c+=1
-        return c/len(x)
-    
-    def variance(self,x):
-        if len(x) ==0:
-            return 0
-        return np.var(x)
-    
-    def energy(self,x):
-        if len(x) ==0:
-            return 0
-        return np.mean(np.square(x))
-    
-    def entropy(self,x):
-        b = self.b
-        if len(x) ==0:
-            return 0
-        x = self.ss_to_binary(x,b)
-        p = np.count_nonzero(x)/len(x)
-        eps = 1e-10
-        p = np.clip(p,eps,1-eps)
-        return -(p*np.log2(p)) - ((1-p)*np.log2(1-p))
-    
-    def sigmoid(self,x):
-        return 1/(1+np.exp(-x))
-    
-    def softsign(self,x):
-        return 0.5*(x/(1+np.abs(x)) + 1)
-    
-    def atan01(self,x):
-        return np.arctan(x)/np.pi + 0.5
-    
-    def neuron_gen(self,x):
-        b = self.b
-        neigh = 1e-8
-        x = np.clip(x,neigh,1-neigh)
-
-        if x>=b:
-            return (1-x)/(1-b)
-        return x/b
-    
-    def neuron_iterator(self,u):
-        n = self.n
-        X = np.zeros(n)
-        X[0] = u.item()
-        for j in range(n-1):
-            X[j+1] = self.neuron_gen(X[j])
-        return X
     
     def build_features(self,data,delay_X_train):
         k = self.k
@@ -79,22 +21,13 @@ class nlfea:
         insize = self.insize
         delay_buffer = delay_X_train.copy()
         self.poly = PolynomialFeatures(degree=deg)
-        dummy_lin = np.zeros(insize*3*(k+1))
+        dummy_lin = np.zeros(insize*(k+1))
         dummy_poly = self.poly.fit_transform(dummy_lin.reshape(1,-1))
         self.feat_size = dummy_poly.shape[1]
 
         history_x = np.zeros((self.feat_size,len(data)))
         for i in range(len(data)):
-            lin = np.zeros(insize*3*(k+1))
-            search_span = np.concatenate((delay_buffer.flatten(),data[i]))
-            for j in range(len(search_span)):
-                u = search_span[j]
-                X = self.neuron_iterator(u)
-                ene = self.energy(X)
-                var = self.variance(X)
-                lin[3*j+0] = u
-                lin[3*j+1] = ene
-                lin[3*j+2] = var
+            lin = np.concatenate((delay_buffer.flatten(),data[i]))
             delay_buffer = np.vstack((delay_buffer[1:],data[i]))
             poly_feat = self.poly.transform(lin.reshape(1,-1))
             history_x[:,i] = poly_feat.flatten()
@@ -116,19 +49,10 @@ class nlfea:
         Y = np.zeros((3,test_len))
         delay_buffer = delay_X_test.copy()
         for i in range(test_len):
-            lin = np.zeros(insize*3*(k+1))
-            search_span = np.concatenate((delay_buffer.flatten(),u))
-            for j in range(len(search_span)):
-                uj = search_span[j]
-                X = self.neuron_iterator(uj)
-                ene = self.energy(X)
-                var = self.variance(X)
-                lin[3*j+0] = uj
-                lin[3*j+1] = ene
-                lin[3*j+2] = var
+            lin = np.concatenate((delay_buffer.flatten(),u))
             poly_feat = self.poly.transform(lin.reshape(1,-1))
             y = np.dot(self.w_out,poly_feat.flatten())
-            y = np.clip(y,0,1)
+            y = np.clip(y,-3,3)
             Y[:, i] = y
             delay_buffer = np.vstack((delay_buffer[1:],u))
             u = y
@@ -178,7 +102,7 @@ def chebyshev_map(length=1500,k=4,x0=0.123456):
 
 from scipy.integrate import solve_ivp
 def generate_lorenz(
-    n_steps=15000,
+    n_steps=35000,
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -242,43 +166,105 @@ def generate_rossler(
 
     return data
 
-scalar = MinMaxScaler(feature_range=(0,1))
+def generate_rossler(
+    t_max=500,
+    dt=0.01,
+    initial_state=(1.0, 1.0, 1.0),
+    a=0.2,
+    b=0.2,
+    c=5.7,
+    discard=5000
+):
+    def rossler(t, state):
+        x, y, z = state
+
+        dxdt = -y - z
+        dydt = x + a * y
+        dzdt = b + z * (x - c)
+
+        return [dxdt, dydt, dzdt]
+
+    t_eval = np.arange(0, t_max, dt)
+
+    sol = solve_ivp(
+        rossler,
+        (0, t_max),
+        initial_state,
+        t_eval=t_eval,
+        method="RK45"
+    )
+
+    data = sol.y.T
+
+    if discard > 0:
+        data = data[discard:]
+
+    return data
+
+def weight_mse(means_values,weights):
+    summ = 0
+    for i in range(len(means_values)):
+        summ += weights[i]*(means_values[i])
+    return summ
+
+
+def gaussian_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    mad = np.median(np.abs(mean_values-med))
+    sigma = 1.4826*mad + 1e-12
+    for i in range(len(mean_values)):
+        weights[i] = np.exp(-((mean_values[i]-med)**2)/(2*sigma**2))
+    weights = weights/np.sum(weights)
+    return weights
+
+def inverse_distance_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    for i in range(len(mean_values)):
+        weights[i] = 1/(1+(np.abs(mean_values[i]-med)))
+    weights = weights/np.sum(weights)
+    return weights
+
+scalar = StandardScaler()
 data = generate_lorenz()
-data = data[3000:]
+n_splits = 5
 train_len = 3000
 test_len = 500
-k = 3
+skip_len = 500
+k=9
+mse_lst = []
+reg_lst = [1e-6,1e-5,1e-4,1e-3]
 
-p = 0
-push = train_len+p+k
+big_mse_lst = {}
+for reg in reg_lst:
+    small_mse_lst = []
+    for i in range(0,n_splits*(train_len+1000),skip_len):
+        X_train = data[i+k:i+k+train_len]
+        X_train_delay = data[i:i+k]
+        X_test = data[i+k+train_len:i+k+train_len+test_len]
+        X_test_delay = data[i+train_len:i+k+train_len]
 
-X_train = data[k:k+train_len]
-delay_X_train = data[:k]
-X_test = data[push:push+test_len]
-delay_X_test = data[push-k:push]
+        y_train = data[i+k+1:i+k+train_len+1]
+        y_test = data[i+1+k+train_len:i+1+k+train_len+test_len]
 
-y_train = data[k+1:k+train_len+1]
-y_test = data[1+push:test_len+1+push]
+        X_train = scalar.fit_transform(X_train)
+        X_train_delay = scalar.transform(X_train_delay)
+        X_test = scalar.transform(X_test)
+        X_test_delay = scalar.transform(X_test_delay)
+        y_train = scalar.transform(y_train)
 
-X_train = scalar.fit_transform(X_train)
-delay_X_train = scalar.transform(delay_X_train)
-y_train = scalar.transform(y_train)
-X_test = scalar.transform(X_test)
-delay_X_test = scalar.transform(delay_X_test)
+        model = nlfea(test_len=test_len,degree=2,k=k,reg=reg)
+        model.fit(X_train,y_train,X_train_delay)
+        y_pred = model.predict(X_test[0],X_test_delay).T
+        y_pred = scalar.inverse_transform(y_pred)
+        mse = mean_absolute_error(y_test,y_pred)
+        small_mse_lst.append(mse)
+
+    weights = gaussian_weights(small_mse_lst)
+    cal_mse = float(weight_mse(small_mse_lst,weights))
+    print(f'for {reg} cal mse is {cal_mse}')
+    big_mse_lst[(reg)] = cal_mse
 
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=3,reg=1e-5)
-model.fit(X_train,y_train,delay_X_train)
-y_pred = model.predict(X_test[0],delay_X_test).T
-y_pred = scalar.inverse_transform(y_pred)
-
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
-
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+print(sorted(big_mse_lst.items(),key=lambda x:x[1]))

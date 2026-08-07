@@ -2,7 +2,7 @@ import numpy as np
 import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
@@ -178,7 +178,7 @@ def chebyshev_map(length=1500,k=4,x0=0.123456):
 
 from scipy.integrate import solve_ivp
 def generate_lorenz(
-    n_steps=15000,
+    n_steps=25000,
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -242,43 +242,74 @@ def generate_rossler(
 
     return data
 
+def weight_mse(means_values,weights):
+    summ = 0
+    for i in range(len(means_values)):
+        summ += weights[i]*(means_values[i])
+    return summ
+
+
+def gaussian_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    mad = np.median(np.abs(mean_values-med))
+    sigma = 1.4826*mad + 1e-12
+    for i in range(len(mean_values)):
+        weights[i] = np.exp(-((mean_values[i]-med)**2)/(2*sigma**2))
+    weights = weights/np.sum(weights)
+    return weights
+
+def inverse_distance_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    for i in range(len(mean_values)):
+        weights[i] = 1/(1+(np.abs(mean_values[i]-med)))
+    weights = weights/np.sum(weights)
+    return weights
+
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
-data = data[3000:]
+n_splits = 5
 train_len = 3000
 test_len = 500
-k = 3
+skip_len = 500
+k=3
+mse_lst = []
+n_lst = [3,4,5,6,8]
+reg_lst = [1e-6,1e-5,1e-4,1e-3]
 
-p = 0
-push = train_len+p+k
+big_mse_lst = {}
+for n in n_lst:
+    for reg in reg_lst:
+        small_mse_lst = []
+        for i in range(0,n_splits*(train_len+1000),skip_len):
+            X_train = data[i+k:i+k+train_len]
+            X_train_delay = data[i:i+k]
+            X_test = data[i+k+train_len:i+k+train_len+test_len]
+            X_test_delay = data[i+train_len:i+k+train_len]
 
-X_train = data[k:k+train_len]
-delay_X_train = data[:k]
-X_test = data[push:push+test_len]
-delay_X_test = data[push-k:push]
+            y_train = data[i+k+1:i+k+train_len+1]
+            y_test = data[i+1+k+train_len:i+1+k+train_len+test_len]
 
-y_train = data[k+1:k+train_len+1]
-y_test = data[1+push:test_len+1+push]
+            X_train = scalar.fit_transform(X_train)
+            X_train_delay = scalar.transform(X_train_delay)
+            X_test = scalar.transform(X_test)
+            X_test_delay = scalar.transform(X_test_delay)
+            y_train = scalar.transform(y_train)
 
-X_train = scalar.fit_transform(X_train)
-delay_X_train = scalar.transform(delay_X_train)
-y_train = scalar.transform(y_train)
-X_test = scalar.transform(X_test)
-delay_X_test = scalar.transform(delay_X_test)
+            model = nlfea(test_len=test_len,n=n,degree=2,k=k,reg=reg)
+            model.fit(X_train,y_train,X_train_delay)
+            y_pred = model.predict(X_test[0],X_test_delay).T
+            y_pred = scalar.inverse_transform(y_pred)
+            mse = mean_absolute_error(y_test,y_pred)
+            small_mse_lst.append(mse)
+
+        weights = gaussian_weights(small_mse_lst)
+        cal_mse = float(weight_mse(small_mse_lst,weights))
+        print(f'for {n} and {reg} cal mse is {cal_mse}')
+        big_mse_lst[(n,reg)] = cal_mse
 
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=3,reg=1e-5)
-model.fit(X_train,y_train,delay_X_train)
-y_pred = model.predict(X_test[0],delay_X_test).T
-y_pred = scalar.inverse_transform(y_pred)
+print(sorted(big_mse_lst.items(),key=lambda x:x[1]))
 
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
-
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+    

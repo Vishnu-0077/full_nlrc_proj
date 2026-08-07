@@ -2,7 +2,7 @@ import numpy as np
 import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
@@ -244,7 +244,6 @@ def generate_rossler(
 
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
-data = data[3000:]
 train_len = 3000
 test_len = 500
 k = 3
@@ -266,19 +265,22 @@ y_train = scalar.transform(y_train)
 X_test = scalar.transform(X_test)
 delay_X_test = scalar.transform(delay_X_test)
 
+n_lst = [3,4,5,6,8]
+reg_lst = [1e-8,1e-7,1e-6,1e-5,1e-4,1e-3]
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=3,reg=1e-5)
-model.fit(X_train,y_train,delay_X_train)
-y_pred = model.predict(X_test[0],delay_X_test).T
-y_pred = scalar.inverse_transform(y_pred)
+mse_lst = {}
 
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
+for n in n_lst:
+    for reg in reg_lst:
+        model = nlfea(test_len=test_len,degree=2,k=k,n=n,reg=reg)
+        model.fit(X_train,y_train,delay_X_train)
+        y_pred = model.predict(X_test[0],delay_X_test).T
+        y_pred = scalar.inverse_transform(y_pred)
+        y_test_testing = y_test.copy()
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+        print(f'n {n} reg {reg} mse {mean_absolute_error(y_test_testing,y_pred)}')
+        mse_lst[(n,reg)] = mean_absolute_error(y_test_testing,y_pred)
+
+best_5 = sorted(mse_lst.items(), key=lambda x: x[1])[:5]
+print('------best_5----')
+print(best_5)

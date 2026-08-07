@@ -204,11 +204,11 @@ def generate_rossler(
     return data
 
 scalar = StandardScaler()
-data = generate_rossler()
-data = data[0:]
-train_len = 10000
-test_len = 1000
-k = 9
+data = generate_lorenz()
+data = data[4000:]
+train_len = 3000
+test_len = 500
+k = 3
 
 p = 0
 push = train_len+p+k
@@ -227,7 +227,7 @@ y_train = scalar.transform(y_train)
 X_test = scalar.transform(X_test)
 delay_X_test = scalar.transform(delay_X_test)
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=4,reg=1e-4)
+model = nlfea(test_len=test_len,degree=2,k=k,reg=1e-3)
 model.fit(X_train,y_train,delay_X_train)
 y_pred = model.predict(X_test[0],delay_X_test).T
 y_pred = scalar.inverse_transform(y_pred)

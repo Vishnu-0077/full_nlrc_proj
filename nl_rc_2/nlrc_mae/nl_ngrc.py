@@ -2,7 +2,7 @@ import numpy as np
 import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
@@ -244,7 +244,7 @@ def generate_rossler(
 
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
-data = data[3000:]
+data = data[1000:]
 train_len = 3000
 test_len = 500
 k = 3
@@ -273,10 +273,10 @@ y_pred = model.predict(X_test[0],delay_X_test).T
 y_pred = scalar.inverse_transform(y_pred)
 
 print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
+print(f'mse of x is {mean_absolute_error(y_test[:,0],y_pred[:,0])}')
+print(f'mse of y is {mean_absolute_error(y_test[:,1],y_pred[:,1])}')
+print(f'mse of z is {mean_absolute_error(y_test[:,2],y_pred[:,2])}')
+print(f'mse of all is {mean_absolute_error(y_test,y_pred)}')
 
 plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
 plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')

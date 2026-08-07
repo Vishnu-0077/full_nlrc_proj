@@ -3,6 +3,8 @@ import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
 from sklearn.metrics import mean_squared_error
+from dtaidistance import dtw,dtw_ndim
+from dtaidistance import dtw_visualisation as dtwvis
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
@@ -272,13 +274,26 @@ model.fit(X_train,y_train,delay_X_train)
 y_pred = model.predict(X_test[0],delay_X_test).T
 y_pred = scalar.inverse_transform(y_pred)
 
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
+dtw_x = dtw.distance(y_test[:,0],y_pred[:,0])/len(y_test)
+dtw_y = dtw.distance(y_test[:,1],y_pred[:,1])/len(y_test)
+dtw_z = dtw.distance(y_test[:,2],y_pred[:,2])/len(y_test)
+dtw_total = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+x_path = dtw.warping_path(y_test[:,0],y_pred[:,0])
+y_path = dtw.warping_path(y_test[:,1],y_pred[:,1])
+z_path = dtw.warping_path(y_test[:,2],y_pred[:,2])
+
+print(dtw_x)
+print(dtw_y)
+print(dtw_z)
+print('values differ beause of when we do total it is done on 3dim\n')
+print(dtw_total)
+
+print()
+print(x_path)
+
+
+
+
+
+
