@@ -261,7 +261,7 @@ for reg in reg_lst:
         mse = mean_absolute_error(y_test,y_pred)
         small_mse_lst.append(mse)
 
-    weights = gaussian_weights(small_mse_lst)
+    weights = inverse_distance_weights(small_mse_lst)
     cal_mse = float(weight_mse(small_mse_lst,weights))
     print(f'for {reg} cal mse is {cal_mse}')
     big_mse_lst[(reg)] = cal_mse

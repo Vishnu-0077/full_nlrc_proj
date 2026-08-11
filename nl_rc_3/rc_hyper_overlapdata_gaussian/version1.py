@@ -102,7 +102,7 @@ def chebyshev_map(length=1000,k=4,x0=0.123456):
     return x
 from scipy.integrate import solve_ivp
 def generate_lorenz(
-    n_steps=15000,
+    n_steps=45000,
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -199,36 +199,32 @@ test_len = 500
 skip_len = 500
 k=3
 mse_lst = []
-n_lst = [3,4,5,6,8]
 reg_lst = [1e-6,1e-5,1e-4,1e-3]
-
 big_mse_lst = {}
-for n in n_lst:
-    for reg in reg_lst:
-        small_mse_lst = []
-        for i in range(0,n_splits*(train_len+1000),skip_len):
-            X_train = data[i:i+train_len]
-            X_test = data[i+train_len:i+train_len+test_len]
-            X_test_delay = data[i+train_len:i+train_len]
+for reg in reg_lst:
+    small_mse_lst = []
+    for i in range(0,n_splits*(train_len+1000),skip_len):
+        X_train = data[i:i+train_len]
+        X_test = data[i+train_len:i+train_len+test_len]
 
-            y_train = data[i+1:i+train_len+1]
-            y_test = data[i+1+train_len:i+1+train_len+test_len]
+        y_train = data[i+1:i+train_len+1]
+        y_test = data[i+1+train_len:i+1+train_len+test_len]
 
-            X_train = scalar.fit_transform(X_train)
-            X_test = scalar.transform(X_test)
-            y_train = scalar.transform(y_train)
+        X_train = scalar.fit_transform(X_train)
+        X_test = scalar.transform(X_test)
+        y_train = scalar.transform(y_train)
 
-            model = rc_nl(test_len=test_len,reg=reg)
-            model.fit(X_train,y_train)
-            y_pred = model.predict(X_test[0]).T
-            y_pred = scalar.inverse_transform(y_pred)
-            mse = mean_absolute_error(y_test,y_pred)
-            small_mse_lst.append(mse)
-    
-        weights = gaussian_weights(small_mse_lst)
-        cal_mse = float(weight_mse(small_mse_lst,weights))
-        print(f'for {n} and {reg} cal mse is {cal_mse}')
-        big_mse_lst[(n,reg)] = cal_mse
+        model = rc_nl(test_len=test_len,ressize=500,reg=reg)
+        model.fit(X_train,y_train)
+        y_pred = model.predict(X_test[0]).T
+        y_pred = scalar.inverse_transform(y_pred)
+        mse = mean_absolute_error(y_test,y_pred)
+        small_mse_lst.append(mse)
+
+    weights = gaussian_weights(small_mse_lst)
+    cal_mse = float(weight_mse(small_mse_lst,weights))
+    print(f'for {reg} cal mse is {cal_mse}')
+    big_mse_lst[(reg)] = cal_mse
 
 
 print(sorted(big_mse_lst.items(),key=lambda x:x[1]))
