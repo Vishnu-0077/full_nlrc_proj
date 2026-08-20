@@ -270,19 +270,19 @@ def inverse_distance_weights(mean_values):
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
 n_splits = 5
-train_len = 3000
-test_len = 500
+train_len = 1000
+test_len =500
 skip_len = 500
 k=3
 mse_lst = []
-n_lst = [3,4,5,6,8]
-reg_lst = [1e-6,1e-5,1e-4,1e-3]
+n_lst = [3,4,5,6,8,10,20,23,25,27,30,35]
+reg_lst = [1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2]
 
 big_mse_lst = {}
 for n in n_lst:
     for reg in reg_lst:
         small_mse_lst = []
-        for i in range(0,n_splits*(train_len+1000),skip_len):
+        for i in range(0,n_splits*(train_len)+skip_len,skip_len):
             X_train = data[i+k:i+k+train_len]
             X_train_delay = data[i:i+k]
             X_test = data[i+k+train_len:i+k+train_len+test_len]
@@ -311,5 +311,3 @@ for n in n_lst:
 
 
 print(sorted(big_mse_lst.items(),key=lambda x:x[1]))
-
-    

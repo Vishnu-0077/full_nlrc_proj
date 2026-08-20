@@ -3,9 +3,9 @@ import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
 from sklearn.metrics import mean_squared_error
-from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from dtaidistance import dtw,dtw_ndim
+from sklearn.cross_decomposition import PLSRegression
 
 class nlfea:
     def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=3):
@@ -104,11 +104,17 @@ class nlfea:
     
     def fit(self,data,y_data,delay_X_train):
         yt = y_data
-        yt = yt.T
         reg = self.reg
-        history_x = self.build_features(data,delay_X_train)
-        print(history_x.shape[0])
-        self.w_out = np.dot(np.dot(yt,history_x.T),linalg.inv(np.dot(history_x,history_x.T)+np.eye(history_x.shape[0])*reg))
+        history_x = self.build_features(data,delay_X_train).T
+        self.Pls = PLSRegression(n_components=200,scale=True)
+        self.Pls.fit(history_x,yt)
+        nt = self.Pls.transform(history_x)
+        train_predit = self.Pls.predict(history_x)
+        print(f'testing on train_data - {mean_squared_error(yt,train_predit)}')
+        print(nt.shape)
+        nt=nt.T
+        yt=yt.T
+        self.w_out = np.dot(np.dot(yt,nt.T),linalg.inv(np.dot(nt,nt.T)+np.eye(nt.shape[0])*reg))
         return self
     
     def predict(self,u,delay_X_test):
@@ -129,7 +135,8 @@ class nlfea:
                 lin[3*j+1] = ene
                 lin[3*j+2] = var
             poly_feat = self.poly.transform(lin.reshape(1,-1))
-            y = np.dot(self.w_out,poly_feat.flatten())
+            pls_feat = self.Pls.transform(poly_feat)
+            y = np.dot(self.w_out,pls_feat.flatten())
             y = np.clip(y,0,1)
             Y[:, i] = y
             delay_buffer = np.vstack((delay_buffer[1:],u))
@@ -255,44 +262,6 @@ def generate_rossler(
 
     return data
 
-def generate_chen(
-    n_steps=15000,
-    dt=0.01,
-    a=35.0,
-    b=3.0,
-    c=28.0,
-    initial_state=(-0.1, 0.5, -0.6),
-    discard=5000  # Added discard parameter
-):
-    def chen(t, state):
-        x, y, z = state
-
-        dx = a * (y - x)
-        dy = (c - a) * x - x * z + c * y
-        dz = x * y - b * z
-
-        return [dx, dy, dz]
-
-    # Calculate total steps needed to account for the discarded transient states
-    total_steps = n_steps + discard
-    t_span = (0, total_steps * dt)
-    t_eval = np.arange(0, total_steps * dt, dt)
-
-    sol = solve_ivp(
-        chen,
-        t_span,
-        initial_state,
-        t_eval=t_eval,
-        method='RK45'
-    )
-
-    data = sol.y.T
-
-    # Remove the initial transient states
-    if discard > 0:
-        data = data[discard:]
-
-    return data
 
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
@@ -319,7 +288,7 @@ X_test = scalar.transform(X_test)
 delay_X_test = scalar.transform(delay_X_test)
 
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=20,reg=1e-6)
+model = nlfea(test_len=test_len,degree=2,k=k,n=5,reg=1e-3)
 model.fit(X_train,y_train,delay_X_train)
 y_pred = model.predict(X_test[0],delay_X_test).T
 y_pred = scalar.inverse_transform(y_pred)

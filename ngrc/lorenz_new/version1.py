@@ -5,6 +5,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+from dtaidistance import dtw,dtw_ndim
 
 class nlfea:
     def __init__(self,b=0.5,n=10,test_len=10,reg=1e-8,k=3,degree=3):
@@ -103,8 +104,12 @@ def chebyshev_map(length=1500,k=4,x0=0.123456):
     return x
 
 from scipy.integrate import solve_ivp
+import numpy as np
+from scipy.integrate import solve_ivp
+
 def generate_lorenz(
     n_steps=15000,
+    discard_steps=2000,  # <-- Add a parameter for transient steps
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -120,8 +125,15 @@ def generate_lorenz(
 
         return [dx, dy, dz]
 
-    t_span = (0, n_steps * dt)
-    t_eval = np.arange(0, n_steps * dt, dt)
+    # Calculate time milestones
+    transient_time = discard_steps * dt
+    total_time = (n_steps + discard_steps) * dt
+
+    # The solver must run from t=0 to the very end
+    t_span = (0, total_time)
+    
+    # But it will ONLY store the points starting from transient_time
+    t_eval = np.arange(transient_time, total_time, dt)
 
     sol = solve_ivp(
         lorenz,
@@ -203,12 +215,52 @@ def generate_rossler(
 
     return data
 
+def generate_chen(
+    n_steps=15000,
+    dt=0.01,
+    a=35.0,
+    b=3.0,
+    c=28.0,
+    initial_state=(-0.1, 0.5, -0.6),
+    discard=5000  # Added discard parameter
+):
+    def chen(t, state):
+        x, y, z = state
+
+        dx = a * (y - x)
+        dy = (c - a) * x - x * z + c * y
+        dz = x * y - b * z
+
+        return [dx, dy, dz]
+
+    # Calculate total steps needed to account for the discarded transient states
+    total_steps = n_steps + discard
+    t_span = (0, total_steps * dt)
+    t_eval = np.arange(0, total_steps * dt, dt)
+
+    sol = solve_ivp(
+        chen,
+        t_span,
+        initial_state,
+        t_eval=t_eval,
+        method='RK45'
+    )
+
+    data = sol.y.T
+
+    # Remove the initial transient states
+    if discard > 0:
+        data = data[discard:]
+
+    return data
+
+
 scalar = StandardScaler()
-data = generate_lorenz()
-data = data[0:]
+data = generate_chen()
+data = data[1000:]
 train_len = 3000
 test_len = 500
-k = 3
+k = 2
 
 p = 0
 push = train_len+p+k
@@ -227,7 +279,7 @@ y_train = scalar.transform(y_train)
 X_test = scalar.transform(X_test)
 delay_X_test = scalar.transform(delay_X_test)
 
-model = nlfea(test_len=test_len,degree=2,k=k,reg=1e-3)
+model = nlfea(test_len=test_len,degree=2,k=k,reg=1e-4)
 model.fit(X_train,y_train,delay_X_train)
 y_pred = model.predict(X_test[0],delay_X_test).T
 y_pred = scalar.inverse_transform(y_pred)
@@ -237,6 +289,8 @@ print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
 print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
 print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
 print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
+dtw_dist = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
+print(f'dtw distance is {dtw_dist}')
 
 plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
 plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')

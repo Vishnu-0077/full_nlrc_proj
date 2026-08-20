@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
 class nlfea:
-    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=3):
+    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=2):
         self.b = b
         self.n = n
         self.test_len = test_len
@@ -177,8 +177,12 @@ def chebyshev_map(length=1500,k=4,x0=0.123456):
     return x
 
 from scipy.integrate import solve_ivp
+import numpy as np
+from scipy.integrate import solve_ivp
+
 def generate_lorenz(
     n_steps=15000,
+    discard_steps=2000,  # <-- Add a parameter for transient steps
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -194,8 +198,15 @@ def generate_lorenz(
 
         return [dx, dy, dz]
 
-    t_span = (0, n_steps * dt)
-    t_eval = np.arange(0, n_steps * dt, dt)
+    # Calculate time milestones
+    transient_time = discard_steps * dt
+    total_time = (n_steps + discard_steps) * dt
+
+    # The solver must run from t=0 to the very end
+    t_span = (0, total_time)
+    
+    # But it will ONLY store the points starting from transient_time
+    t_eval = np.arange(transient_time, total_time, dt)
 
     sol = solve_ivp(
         lorenz,
@@ -243,11 +254,11 @@ def generate_rossler(
     return data
 
 scalar = MinMaxScaler(feature_range=(0,1))
-data = generate_rossler()
+data = generate_lorenz()
 data = data[0:]
-train_len = 10000
-test_len = 1000
-k = 3
+train_len = 1000
+test_len = 500
+k = 2
 
 p = 0
 push = train_len+p+k
@@ -281,14 +292,15 @@ print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
 x = y_pred[:,0]
 y = y_pred[:,1]
 z = y_pred[:,2]
-X_orig = scalar.inverse_transform(X_train)[:,0]
-y_orig = scalar.inverse_transform(X_train)[:,1]
-z_orig = scalar.inverse_transform(X_train)[:,2]
+X_orig = scalar.inverse_transform(y_train)[:,0]
+y_orig = scalar.inverse_transform(y_train)[:,1]
+z_orig = scalar.inverse_transform(y_train)[:,2]
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
-ax.plot(X_orig,y_orig,z_orig,color='red',label='Original')
+ax.plot(X_orig,y_orig,z_orig,color='red',label='Original_train')
 ax.plot(x,y,z,color='blue',label='Predicted')
+ax.plot(y_test[:,0],y_test[:,1],y_test[:,2],color='green',label='original_test')
 plt.legend()
 plt.show()

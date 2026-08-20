@@ -101,8 +101,12 @@ def chebyshev_map(length=1000,k=4,x0=0.123456):
         x[t] = np.cos(k*np.arccos(x[t-1]))
     return x
 from scipy.integrate import solve_ivp
+import numpy as np
+from scipy.integrate import solve_ivp
+
 def generate_lorenz(
     n_steps=15000,
+    discard_steps=2000,  # <-- Add a parameter for transient steps
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -118,8 +122,15 @@ def generate_lorenz(
 
         return [dx, dy, dz]
 
-    t_span = (0, n_steps * dt)
-    t_eval = np.arange(0, n_steps * dt, dt)
+    # Calculate time milestones
+    transient_time = discard_steps * dt
+    total_time = (n_steps + discard_steps) * dt
+
+    # The solver must run from t=0 to the very end
+    t_span = (0, total_time)
+    
+    # But it will ONLY store the points starting from transient_time
+    t_eval = np.arange(transient_time, total_time, dt)
 
     sol = solve_ivp(
         lorenz,
@@ -166,9 +177,9 @@ def generate_rossler(
 
     return data
 
-data = generate_rossler()
-train_len = 3100
-test_len = 1000
+data = generate_lorenz()
+train_len = 1100
+test_len = 500
 
 
 X_train = data[:train_len]
@@ -182,7 +193,7 @@ X_train = scalar.fit_transform(X_train)
 X_test = scalar.transform(X_test)
 y_train = scalar.transform(y_train)
 
-model = rc_nl(test_len=test_len,reg=1e-7,ressize=500)
+model = rc_nl(test_len=test_len,reg=1e-4,ressize=500)
 model.fit(X_train,y_train)
 y_pred = model.predict(X_test[0])
 y_pred = scalar.inverse_transform(y_pred.T)

@@ -3,19 +3,19 @@ import random
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
 from sklearn.metrics import mean_squared_error
-from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from dtaidistance import dtw,dtw_ndim
+from sklearn.cross_decomposition import PLSRegression
 
 class nlfea:
-    def __init__(self,b=0.499,n=10,test_len=10,reg=1e-8,k=3,degree=3):
+    def __init__(self,b=0.499,n=10,test_len=10,comp=100,k=3,degree=3):
         self.b = b
         self.n = n
         self.test_len = test_len
-        self.reg = reg
         self.k = k
         self.degree = degree
         self.insize = 3
+        self.comp=comp
 
     def ss_to_binary(self,x,thres):
         return (np.array(x)>thres).astype(int)
@@ -104,11 +104,9 @@ class nlfea:
     
     def fit(self,data,y_data,delay_X_train):
         yt = y_data
-        yt = yt.T
-        reg = self.reg
-        history_x = self.build_features(data,delay_X_train)
-        print(history_x.shape[0])
-        self.w_out = np.dot(np.dot(yt,history_x.T),linalg.inv(np.dot(history_x,history_x.T)+np.eye(history_x.shape[0])*reg))
+        history_x = self.build_features(data,delay_X_train).T
+        self.Pls = PLSRegression(n_components=self.comp,scale=True)
+        self.Pls.fit(history_x,yt)
         return self
     
     def predict(self,u,delay_X_test):
@@ -129,7 +127,7 @@ class nlfea:
                 lin[3*j+1] = ene
                 lin[3*j+2] = var
             poly_feat = self.poly.transform(lin.reshape(1,-1))
-            y = np.dot(self.w_out,poly_feat.flatten())
+            y = self.Pls.predict(poly_feat).flatten()
             y = np.clip(y,0,1)
             Y[:, i] = y
             delay_buffer = np.vstack((delay_buffer[1:],u))
@@ -255,49 +253,9 @@ def generate_rossler(
 
     return data
 
-def generate_chen(
-    n_steps=15000,
-    dt=0.01,
-    a=35.0,
-    b=3.0,
-    c=28.0,
-    initial_state=(-0.1, 0.5, -0.6),
-    discard=5000  # Added discard parameter
-):
-    def chen(t, state):
-        x, y, z = state
-
-        dx = a * (y - x)
-        dy = (c - a) * x - x * z + c * y
-        dz = x * y - b * z
-
-        return [dx, dy, dz]
-
-    # Calculate total steps needed to account for the discarded transient states
-    total_steps = n_steps + discard
-    t_span = (0, total_steps * dt)
-    t_eval = np.arange(0, total_steps * dt, dt)
-
-    sol = solve_ivp(
-        chen,
-        t_span,
-        initial_state,
-        t_eval=t_eval,
-        method='RK45'
-    )
-
-    data = sol.y.T
-
-    # Remove the initial transient states
-    if discard > 0:
-        data = data[discard:]
-
-    return data
-
 scalar = MinMaxScaler(feature_range=(0,1))
 data = generate_lorenz()
-data = data[0:]
-train_len = 3000
+train_len = 1000
 test_len = 500
 k = 2
 
@@ -318,21 +276,22 @@ y_train = scalar.transform(y_train)
 X_test = scalar.transform(X_test)
 delay_X_test = scalar.transform(delay_X_test)
 
+n_lst = [3,4,5,6,8]
+components = [3,10,20,30,100,150,200]
 
-model = nlfea(test_len=test_len,degree=2,k=k,n=20,reg=1e-6)
-model.fit(X_train,y_train,delay_X_train)
-y_pred = model.predict(X_test[0],delay_X_test).T
-y_pred = scalar.inverse_transform(y_pred)
+mse_lst = {}
 
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
-dtw_dist = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
-print(f'dtw distance is {dtw_dist}')
+for n in n_lst:
+    for com in components:
+        model = nlfea(test_len=test_len,degree=2,k=k,n=n,comp=com)
+        model.fit(X_train,y_train,delay_X_train)
+        y_pred = model.predict(X_test[0],delay_X_test).T
+        y_pred = scalar.inverse_transform(y_pred)
+        y_test_testing = y_test.copy()
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+        print(f'n {n} reg {com} mse {mean_squared_error(y_test_testing,y_pred)}')
+        mse_lst[(n,com)] = mean_squared_error(y_test_testing,y_pred)
+
+best_5 = sorted(mse_lst.items(), key=lambda x: x[1])[:5]
+print('------best_5----')
+print(best_5)

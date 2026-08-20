@@ -183,6 +183,7 @@ def chebyshev_map(length=1500,k=4,x0=0.123456):
 from scipy.integrate import solve_ivp
 def generate_lorenz(
     n_steps=15000,
+    discard_steps=2000,  # <-- Add a parameter for transient steps
     dt=0.01,
     sigma=10.0,
     rho=28.0,
@@ -198,8 +199,15 @@ def generate_lorenz(
 
         return [dx, dy, dz]
 
-    t_span = (0, n_steps * dt)
-    t_eval = np.arange(0, n_steps * dt, dt)
+    # Calculate time milestones
+    transient_time = discard_steps * dt
+    total_time = (n_steps + discard_steps) * dt
+
+    # The solver must run from t=0 to the very end
+    t_span = (0, total_time)
+    
+    # But it will ONLY store the points starting from transient_time
+    t_eval = np.arange(transient_time, total_time, dt)
 
     sol = solve_ivp(
         lorenz,
@@ -247,11 +255,11 @@ def generate_rossler(
     return data
 
 scalar = MinMaxScaler(feature_range=(0,1))
-data = generate_rossler()
-data = data[0:]
-train_len = 3000
-test_len = 1000
-k = 3
+data = generate_lorenz()
+data = data[1000:]
+train_len = 1000
+test_len = 500
+k = 2
 
 p = 0
 push = train_len+p+k
