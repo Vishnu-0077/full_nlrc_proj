@@ -16,7 +16,7 @@ class nlfea:
         self.k = k
         self.degree = degree
         self.feature_scalar = StandardScaler()
-        self.insize = 3
+        self.insize = 2
     
     def build_features(self,data,delay_X_train):
         k = self.k
@@ -49,7 +49,7 @@ class nlfea:
         test_len = self.test_len
         k = self.k
         insize = self.insize
-        Y = np.zeros((3,test_len))
+        Y = np.zeros((insize,test_len))
         delay_buffer = delay_X_test.copy()
         for i in range(test_len):
             lin = np.concatenate((delay_buffer.flatten(),u))
@@ -215,48 +215,35 @@ def generate_rossler(
 
     return data
 
-def generate_chen(
-    n_steps=15000,
-    dt=0.01,
-    a=35.0,
-    b=3.0,
-    c=28.0,
-    initial_state=(-0.1, 0.5, -0.6),
-    discard=5000  # Added discard parameter
+
+def generate_henon_map(
+    length=5000,
+    a=1.4,
+    b=0.3,
+    initial_state=(0.1, 0.3),
+    discard=1000
 ):
-    def chen(t, state):
-        x, y, z = state
 
-        dx = a * (y - x)
-        dy = (c - a) * x - x * z + c * y
-        dz = x * y - b * z
+    x = np.zeros(length + discard)
+    y = np.zeros(length + discard)
 
-        return [dx, dy, dz]
+    x[0], y[0] = initial_state
 
-    # Calculate total steps needed to account for the discarded transient states
-    total_steps = n_steps + discard
-    t_span = (0, total_steps * dt)
-    t_eval = np.arange(0, total_steps * dt, dt)
+    # Generate including transient
+    for n in range(length + discard - 1):
+        x[n+1] = 1 - a * x[n]**2 + y[n]
+        y[n+1] = b * x[n]
 
-    sol = solve_ivp(
-        chen,
-        t_span,
-        initial_state,
-        t_eval=t_eval,
-        method='RK45'
-    )
+    # Remove transient
+    x = x[discard:]
+    y = y[discard:]
 
-    data = sol.y.T
-
-    # Remove the initial transient states
-    if discard > 0:
-        data = data[discard:]
+    data = np.column_stack((x, y))
 
     return data
 
-
 scalar = StandardScaler()
-data = generate_lorenz()
+data = generate_henon_map()
 data = data[0:]
 train_len = 1000
 test_len = 500
@@ -287,14 +274,23 @@ y_pred = scalar.inverse_transform(y_pred)
 print(f'shape of Y is {y_pred.shape}')
 print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
 print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
 print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
 dtw_dist = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
 print(f'dtw distance is {dtw_dist}')
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
+x = y_pred[:,0]
+y = y_pred[:,1]
+X_orig = scalar.inverse_transform(y_train)[:,0]
+y_orig = scalar.inverse_transform(y_train)[:,1]
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+ax.plot(X_orig,y_orig,color='red',label='Original_train')
+ax.plot(x,y,color='blue',label='Predicted')
+ax.plot(y_test[:,0],y_test[:,1],color='green',label='original_test')
 plt.legend()
 plt.show()
+
 
 

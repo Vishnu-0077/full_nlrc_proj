@@ -215,48 +215,55 @@ def generate_rossler(
 
     return data
 
-def generate_chen(
-    n_steps=15000,
+
+def generate_hindmarsh_rose(
+    t_max=500,
     dt=0.01,
-    a=35.0,
+    initial_state=(-1.6, -10.0, 3.0),
+    a=1.0,
     b=3.0,
-    c=28.0,
-    initial_state=(-0.1, 0.5, -0.6),
-    discard=5000  # Added discard parameter
+    c=1.0,
+    d=5.0,
+    r=0.006,
+    s=4.0,
+    x0=-1.6,
+    discard=1000
 ):
-    def chen(t, state):
+    from scipy.integrate import solve_ivp
+    import numpy as np
+
+    def hr_equations(t, state):
         x, y, z = state
 
-        dx = a * (y - x)
-        dy = (c - a) * x - x * z + c * y
-        dz = x * y - b * z
+        dx = y - a*x**3 + b*x**2 - z
+        dy = c - d*x**2 - y
+        dz = r * (s*(x - x0) - z)
 
         return [dx, dy, dz]
 
-    # Calculate total steps needed to account for the discarded transient states
-    total_steps = n_steps + discard
-    t_span = (0, total_steps * dt)
-    t_eval = np.arange(0, total_steps * dt, dt)
+    # Total number of points including discarded transient
+    n_total = int(t_max / dt) + discard
+
+    t_full = np.arange(n_total) * dt
 
     sol = solve_ivp(
-        chen,
-        t_span,
+        hr_equations,
+        (t_full[0], t_full[-1]),
         initial_state,
-        t_eval=t_eval,
-        method='RK45'
+        t_eval=t_full,
+        method="RK45"
     )
 
-    data = sol.y.T
+    data_full = sol.y.T
 
-    # Remove the initial transient states
-    if discard > 0:
-        data = data[discard:]
+    # Remove transient
+    data = data_full[discard:]
+    t = t_full[discard:]
 
     return data
 
-
 scalar = StandardScaler()
-data = generate_lorenz()
+data = generate_hindmarsh_rose()
 data = data[0:]
 train_len = 1000
 test_len = 500
@@ -292,9 +299,21 @@ print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
 dtw_dist = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
 print(f'dtw distance is {dtw_dist}')
 
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
+x = y_pred[:,0]
+y = y_pred[:,1]
+z = y_pred[:,2]
+X_orig = scalar.inverse_transform(y_train)[:,0]
+y_orig = scalar.inverse_transform(y_train)[:,1]
+z_orig = scalar.inverse_transform(y_train)[:,2]
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+ax.plot(X_orig,y_orig,z_orig,color='red',label='Original_train')
+ax.plot(x,y,z,color='blue',label='Predicted')
+ax.plot(y_test[:,0],y_test[:,1],y_test[:,2],color='green',label='original_test')
 plt.legend()
 plt.show()
+
 
 

@@ -2,7 +2,7 @@ import numpy as np
 import random
 from scipy import linalg
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error,mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from dtaidistance import dtw,dtw_ndim
@@ -16,7 +16,7 @@ class nlfea:
         self.k = k
         self.degree = degree
         self.feature_scalar = StandardScaler()
-        self.insize = 3
+        self.insize = 2
     
     def build_features(self,data,delay_X_train):
         k = self.k
@@ -49,7 +49,7 @@ class nlfea:
         test_len = self.test_len
         k = self.k
         insize = self.insize
-        Y = np.zeros((3,test_len))
+        Y = np.zeros((insize,test_len))
         delay_buffer = delay_X_test.copy()
         for i in range(test_len):
             lin = np.concatenate((delay_buffer.flatten(),u))
@@ -215,86 +215,97 @@ def generate_rossler(
 
     return data
 
-def generate_chen(
-    n_steps=15000,
-    dt=0.01,
-    a=35.0,
-    b=3.0,
-    c=28.0,
-    initial_state=(-0.1, 0.5, -0.6),
-    discard=5000  # Added discard parameter
+
+def generate_henon_map(
+    length=5000,
+    a=1.4,
+    b=0.3,
+    initial_state=(0.1, 0.3),
+    discard=1000
 ):
-    def chen(t, state):
-        x, y, z = state
 
-        dx = a * (y - x)
-        dy = (c - a) * x - x * z + c * y
-        dz = x * y - b * z
+    x = np.zeros(length + discard)
+    y = np.zeros(length + discard)
 
-        return [dx, dy, dz]
+    x[0], y[0] = initial_state
 
-    # Calculate total steps needed to account for the discarded transient states
-    total_steps = n_steps + discard
-    t_span = (0, total_steps * dt)
-    t_eval = np.arange(0, total_steps * dt, dt)
+    # Generate including transient
+    for n in range(length + discard - 1):
+        x[n+1] = 1 - a * x[n]**2 + y[n]
+        y[n+1] = b * x[n]
 
-    sol = solve_ivp(
-        chen,
-        t_span,
-        initial_state,
-        t_eval=t_eval,
-        method='RK45'
-    )
+    # Remove transient
+    x = x[discard:]
+    y = y[discard:]
 
-    data = sol.y.T
-
-    # Remove the initial transient states
-    if discard > 0:
-        data = data[discard:]
+    data = np.column_stack((x, y))
 
     return data
 
+def weight_mse(means_values,weights):
+    summ = 0
+    for i in range(len(means_values)):
+        summ += weights[i]*(means_values[i])
+    return summ
+
+
+def gaussian_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    mad = np.median(np.abs(mean_values-med))
+    sigma = 1.4826*mad + 1e-12
+    for i in range(len(mean_values)):
+        weights[i] = np.exp(-((mean_values[i]-med)**2)/(2*sigma**2))
+    weights = weights/np.sum(weights)
+    return weights
+
+def inverse_distance_weights(mean_values):
+    weights = np.zeros(len(mean_values))
+    med = np.median(mean_values)
+    for i in range(len(mean_values)):
+        weights[i] = 1/(1+(np.abs(mean_values[i]-med)))
+    weights = weights/np.sum(weights)
+    return weights
 
 scalar = StandardScaler()
-data = generate_lorenz()
-data = data[0:]
-train_len = 1000
+data = generate_henon_map()
+n_splits = 5
+train_len = 3000
 test_len = 500
-k = 2
+skip_len = 500
+k=3
+mse_lst = []
+reg_lst = [1e-6,1e-5,1e-4,1e-3]
 
-p = 0
-push = train_len+p+k
+big_mse_lst = {}
+for reg in reg_lst:
+    small_mse_lst = []
+    for i in range(0,n_splits*(train_len+1000),skip_len):
+        X_train = data[i+k:i+k+train_len]
+        X_train_delay = data[i:i+k]
+        X_test = data[i+k+train_len:i+k+train_len+test_len]
+        X_test_delay = data[i+train_len:i+k+train_len]
 
-X_train = data[k:k+train_len]
-delay_X_train = data[:k]
-X_test = data[push:push+test_len]
-delay_X_test = data[push-k:push]
+        y_train = data[i+k+1:i+k+train_len+1]
+        y_test = data[i+1+k+train_len:i+1+k+train_len+test_len]
 
-y_train = data[k+1:k+train_len+1]
-y_test = data[1+push:test_len+1+push]
+        X_train = scalar.fit_transform(X_train)
+        X_train_delay = scalar.transform(X_train_delay)
+        X_test = scalar.transform(X_test)
+        X_test_delay = scalar.transform(X_test_delay)
+        y_train = scalar.transform(y_train)
 
-X_train = scalar.fit_transform(X_train)
-delay_X_train = scalar.transform(delay_X_train)
-y_train = scalar.transform(y_train)
-X_test = scalar.transform(X_test)
-delay_X_test = scalar.transform(delay_X_test)
+        model = nlfea(test_len=test_len,degree=2,k=k,reg=reg)
+        model.fit(X_train,y_train,X_train_delay)
+        y_pred = model.predict(X_test[0],X_test_delay).T
+        y_pred = scalar.inverse_transform(y_pred)
+        mse = mean_absolute_error(y_test,y_pred)
+        small_mse_lst.append(mse)
 
-model = nlfea(test_len=test_len,degree=2,k=k,reg=1e-4)
-model.fit(X_train,y_train,delay_X_train)
-y_pred = model.predict(X_test[0],delay_X_test).T
-y_pred = scalar.inverse_transform(y_pred)
-
-print(f'shape of Y is {y_pred.shape}')
-print(f'mse of x is {mean_squared_error(y_test[:,0],y_pred[:,0])}')
-print(f'mse of y is {mean_squared_error(y_test[:,1],y_pred[:,1])}')
-print(f'mse of z is {mean_squared_error(y_test[:,2],y_pred[:,2])}')
-print(f'mse of all is {mean_squared_error(y_test,y_pred)}')
-dtw_dist = dtw_ndim.distance(y_test,y_pred)/(len(y_test)*3)
-print(f'dtw distance is {dtw_dist}')
-
-plt.plot(np.arange(len(y_test)),y_test,c='r',label='real')
-plt.plot(np.arange(len(y_pred)),y_pred,c='b',label='predicted')
-plt.legend()
-plt.show()
+    weights = inverse_distance_weights(small_mse_lst)
+    cal_mse = float(weight_mse(small_mse_lst,weights))
+    print(f'for {reg} cal mse is {cal_mse}')
+    big_mse_lst[(reg)] = cal_mse
 
 
+print(sorted(big_mse_lst.items(),key=lambda x:x[1]))
